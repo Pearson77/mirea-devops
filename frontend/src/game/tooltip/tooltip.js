@@ -1,0 +1,138 @@
+import Phaser from "phaser";
+
+export class Tooltip {
+    constructor(scene, x, y, textKey, dolphinInstance, voice, isinverse = false) {
+        this.scene = scene;
+        this.x = x;
+        this.y = y;
+        this.textKey = textKey;
+        this.dolphin  = dolphinInstance;
+        this.isinverse = isinverse;
+        this.voice = voice;
+
+        this.keySPACE = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+        this.visible = false;
+        this.showed = false;
+        this.elements = []; // Массив для хранения элементов подсказки
+    }
+
+    createTooltip() {
+        // Затемнение сцены
+        this.darkOverlay = this.scene.add.graphics();
+        this.darkOverlay.fillStyle(0x000000, 0.15); // Черный цвет с прозрачностью 15%
+        this.darkOverlay.fillRect(0, 0, this.scene.sys.game.config.width + 200, this.scene.sys.game.config.height + 200);
+        this.darkOverlay.setVisible(false);
+        this.elements.push(this.darkOverlay);
+
+        // Облако текста
+        this.text = this.scene.add.image(this.x + 35, this.y, this.textKey);
+        this.text.setOrigin(0, 1);
+        this.text.visible = false;
+        this.elements.push(this.text);
+
+        // Текст сверху как закрыть подсказку
+        this.textHelp = this.scene.add.image(960, 75, 'textHelp');
+        this.textHelp.visible = false;
+        this.elements.push(this.textHelp);
+
+        // Спрайт дельфина
+        this.dolphin.x = this.x;
+        this.dolphin.y = this.y;
+
+        // Анимация текста подсказки
+        this.scene.tweens.add({
+            targets: this.textHelp,
+            scale: { from: 0.95, to: 1.05 },  // Меняем масштаб от 0.95 до 1.05
+            duration: 1000,                   // Длительность одного цикла (в мс)
+            yoyo: true,                       // Возврат к начальному значению
+            repeat: -1,                       // Бесконечное повторение
+            ease: 'Sine.easeInOut'            // Плавное ускорение/замедление
+        });
+
+        // Обработчик кликов
+        this.setupClickHandler();
+    }
+
+    setupClickHandler() {
+        // Закрытие при клике вне подсказки
+        this.scene.input.on('pointerdown', () => {
+            this.hide();
+        });
+
+        this.keySPACE.on('down', () => {
+            this.hide();
+        });
+    }
+
+    show() {
+        this.createTooltip();
+        this.visible = true;
+        this.scene.sceneStoped = true;
+
+        // Запускаем воспроизведение озвучки
+        this.voice.play();
+
+        // Показываем все элементы
+        this.elements.forEach(el => {
+            el.setVisible(true);
+            el.setActive(true);
+        });
+
+        // Анимация появления
+        this.scene.tweens.add({
+            targets: this.elements,
+            alpha: { from: 0, to: 1 },
+            scale: { from: 0.9, to: 1 },
+            duration: 250,
+            ease: 'Quad.out'
+        });
+
+        // Анимация появления дельфина
+        this.dolphin.play(this.isinverse ? 'up_inverse' : 'up')
+        this.dolphin.play(this.isinverse ? 'static_inverse' : 'static')
+    }
+
+    hide() {
+        if (this.showed) return;
+
+        this.visible = false;
+        this.scene.sceneStoped = false;
+        this.showed = true;
+
+        // Останавливаем озвучку диалога
+        this.voice.stop();
+        this.voice.destroy();
+        this.scene.sound.removeByKey(this.voice.key);
+
+        if (this.scene.cache.audio.exists(this.voice.key)) {
+            this.scene.cache.audio.remove(this.voice.key);
+        }
+
+        this.dolphin.play(this.isinverse ? 'down_inverse' : 'down');
+
+        // Анимация исчезновения
+        this.scene.tweens.add({
+            targets: this.elements,
+            alpha: 0,
+            scale: 0.9,
+            duration: 250,
+            onComplete: () => {
+                this.elements.forEach(el => {
+                    el.setVisible(false);
+                    el.setActive(false);
+                    el.destroy();
+                });
+            }
+        });
+    }
+
+    destroy() {
+        // Удаляем все элементы
+        this.elements.forEach(el => el.destroy());
+        this.elements = [];
+
+        // Удаляем обработчик
+        this.scene.input.off('pointerdown');
+    }
+}
